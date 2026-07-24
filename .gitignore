@@ -1,0 +1,16 @@
+# Sanal Ortam (Virtual Environment)
+venv/
+env/
+
+# Python Önbellek Dosyaları (Cache)
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+
+# İşletim Sistemi Dosyaları
+.DS_Store
+Thumbs.db
+
+# İleride ekleyeceğimiz gizli şifre dosyaları
+.env
