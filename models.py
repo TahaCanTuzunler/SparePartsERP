@@ -1,33 +1,54 @@
-from sqlalchemy import Column, Integer, String, Float, ForeignKey, Text
+from sqlalchemy import Column, Integer, String, Float, ForeignKey, Text, DateTime
 from sqlalchemy.orm import relationship
 from database import Base
+import datetime
 
 # Tedarikçiler Tablosu
 class Supplier(Base):
-    __tablename__ = "suppliers" # Veritabanındaki tablonun adı
+    __tablename__ = "suppliers" 
 
-    id = Column(Integer, primary_key=True, index=True) # Her kaydın benzersiz kimliği (1, 2, 3...)
-    name = Column(String, index=True)                  # Firma Adı
-    contact_email = Column(String, unique=True)        # İletişim E-postası (unique: aynı e-posta 2 kez eklenemez)
-    phone = Column(String)                             # Telefon Numarası
+    id = Column(Integer, primary_key=True, index=True) 
+    name = Column(String, index=True)                  
+    contact_email = Column(String, unique=True)        
+    phone = Column(String)                             
 
-    # İlişki: Bir tedarikçinin birden fazla parçası olabilir. (One-to-Many)
-    # Bu özellik veritabanında sütun oluşturmaz, Python'da kod yazarken bize kolaylık sağlar.
     parts = relationship("SparePart", back_populates="supplier")
-
 
 # Yedek Parçalar Tablosu
 class SparePart(Base):
     __tablename__ = "spare_parts"
 
     id = Column(Integer, primary_key=True, index=True)
-    name = Column(String, index=True)                  # Parça Adı (Örn: Fren Balatası)
-    description = Column(Text)                         # Parça Açıklaması
-    price = Column(Float)                              # Fiyatı (Ondalıklı sayı)
-    stock_quantity = Column(Integer, default=0)        # Stoktaki adet (Varsayılan 0)
+    name = Column(String, index=True)                  
+    description = Column(Text)                         
+    price = Column(Float)                              
+    stock_quantity = Column(Integer, default=0)        
     
-    # Foreign Key (Dış Anahtar): Bu parçanın hangi tedarikçiye ait olduğunu tutar
     supplier_id = Column(Integer, ForeignKey("suppliers.id")) 
 
-    # İlişki: Bu parçanın sahibi olan tedarikçiye Python üzerinden kolayca erişmek için
     supplier = relationship("Supplier", back_populates="parts")
+    
+    # YENİ: Bir parçanın birden fazla stok hareketi (GİRİŞ/ÇIKIŞ) olabilir
+    movements = relationship("StockMovement", back_populates="part")
+
+
+# YENİ EKLENEN TABLO: Stok Hareketleri Tablosu
+class StockMovement(Base):
+    __tablename__ = "stock_movements"
+
+    id = Column(Integer, primary_key=True, index=True)
+    
+    # Hangi parça için hareket yapılıyor? (Dış Anahtar)
+    part_id = Column(Integer, ForeignKey("spare_parts.id"))
+    
+    # Hareket tipi: "IN" (Depoya Giriş) veya "OUT" (Depodan Çıkış)
+    movement_type = Column(String) 
+    
+    # Kaç adet girdi veya çıktı?
+    quantity = Column(Integer)
+    
+    # İşlem ne zaman yapıldı? (Otomatik olarak o anın tarih ve saatini alır)
+    movement_date = Column(DateTime, default=datetime.datetime.utcnow)
+
+    # Bu hareketin ait olduğu parçaya Python'dan kolayca ulaşmak için
+    part = relationship("SparePart", back_populates="movements")

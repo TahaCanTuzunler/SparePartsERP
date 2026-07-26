@@ -1,40 +1,55 @@
 from pydantic import BaseModel, EmailStr
-from typing import Optional
+from datetime import datetime
+from typing import List, Optional
 
-# Tedarikçi için temel şema (Hem veri alırken hem veri gönderirken ortak olan alanlar)
+# --- TEDARİKÇİ ŞEMALARI ---
 class SupplierBase(BaseModel):
     name: str
-    contact_email: EmailStr  # Pydantic otomatik olarak email formatını (abc@xyz.com) kontrol edecek
-    phone: Optional[str] = None
+    contact_email: EmailStr
+    phone: str
 
-# Yeni tedarikçi eklerken (POST işlemi) kullanacağımız şema
 class SupplierCreate(SupplierBase):
     pass
 
-# Veritabanından kullanıcıya veri gönderirken (GET işlemi) kullanacağımız şema
 class SupplierResponse(SupplierBase):
-    id: int # Veritabanında otomatik oluşan ID'yi de dönmek istiyoruz
+    id: int
 
-    # Bu ayar, SQLAlchemy modellerini (ORM) Pydantic şemalarına sorunsuz dönüştürmeyi sağlar
     class Config:
         from_attributes = True
 
-
-# Yedek Parça için temel şema
+# --- YEDEK PARÇA ŞEMALARI ---
 class SparePartBase(BaseModel):
     name: str
-    description: Optional[str] = None
+    description: str
     price: float
-    stock_quantity: int = 0
-
-# Yeni yedek parça eklerken kullanacağımız şema
-class SparePartCreate(SparePartBase):
-    supplier_id: int # Parçanın kime ait olduğunu belirtmek zorundayız
-
-# Veritabanından kullanıcıya yedek parça verisi dönerken kullanılacak şema
-class SparePartResponse(SparePartBase):
-    id: int
+    stock_quantity: int
     supplier_id: int
 
+class SparePartCreate(SparePartBase):
+    pass
+
+class SparePartResponse(SparePartBase):
+    id: int
+
     class Config:
+        from_attributes = True
+
+# --- YENİ: STOK HAREKETİ ŞEMALARI ---
+
+# Kullanıcıdan API'ye gelirken beklediğimiz veri yapısı
+class StockMovementCreate(BaseModel):
+    part_id: int
+    movement_type: str # Sadece "IN" veya "OUT" olmasını bekliyoruz
+    quantity: int
+
+# API'den kullanıcıya (Swagger'a) dönerken göstereceğimiz yapı
+class StockMovementResponse(BaseModel):
+    id: int
+    part_id: int
+    movement_type: str
+    quantity: int
+    movement_date: datetime # Modeldeki tarihi de gösteriyoruz
+
+    class Config:
+        # SQLAlchemy objelerini Pydantic sözlüklerine çevirmesi için gerekli sihirli ayar
         from_attributes = True
