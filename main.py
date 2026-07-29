@@ -4,6 +4,11 @@ from sqlalchemy.orm import Session
 import models, schemas
 from database import SessionLocal, engine
 
+import joblib
+import pandas as pd
+from datetime import datetime
+from sqlalchemy.sql import func
+
 # Veritabanı tablolarının oluşturulduğundan emin oluyoruz
 models.Base.metadata.create_all(bind=engine)
 
@@ -82,3 +87,58 @@ def create_stock_movement(movement: schemas.StockMovementCreate, db: Session = D
 def read_movements(skip: int = 0, limit: int = 100, db: Session = Depends(get_db)):
     movements = db.query(models.StockMovement).offset(skip).limit(limit).all()
     return movements
+
+# Modeli uygulama başlarken bir kere hafızaya alıyoruz (Her istekte baştan yüklememek için)
+try:
+    ml_model = joblib.load("sales_forecasting_xgboost.pkl")
+except Exception as e:
+    ml_model = None
+    print("Uyarı: Model dosyası bulunamadı!")
+
+@app.get("/api/predict/{part_id}")
+def predict_next_month_sales(part_id: int, db: Session = Depends(get_db)):
+    if ml_model is None:
+        return {"error": "Model yüklenemedi."}
+
+    # 1. İçinde bulunduğumuz ayı ve yılı bul (Şu an Temmuz 2026)
+    now = datetime.now()
+    current_year = now.year
+    current_month = now.month
+
+    # Tahmin edeceğimiz ay (Önümüzdeki ay -> Ağustos)
+    next_month = current_month + 1 if current_month < 12 else 1
+
+    # 2. XGBoost bizden 'prev_month_sales' istiyordu. 
+    # Gelecek ay için (Ağustos) önceki ay, içinde bulunduğumuz aydır (Temmuz).
+    # Veritabanına gidip "Bu parçadan Temmuz ayında toplam kaç tane satılmış?" diye soruyoruz:
+    current_month_sales = db.query(func.sum(models.StockMovement.quantity))\
+        .filter(models.StockMovement.part_id == part_id)\
+        .filter(models.StockMovement.movement_type == "OUT")\
+        .filter(func.extract('year', models.StockMovement.movement_date) == current_year)\
+        .filter(func.extract('month', models.StockMovement.movement_date) == current_month)\
+        .scalar()
+
+    # Eğer bu ay hiç satış olmadıysa 0 sayıyoruz
+    current_month_sales = current_month_sales if current_month_sales else 0
+
+    # 3. XGBoost'un beklediği formata (Pandas DataFrame) çeviriyoruz
+    # DİKKAT: Kolon isimleri train_model.py'dekiyle BİREBİR aynı olmalı!
+    input_data = pd.DataFrame([{
+        'part_id': part_id,
+        'month': next_month,
+        'prev_month_sales': current_month_sales
+    }])
+
+    # 4. Ve Sihir Gerçekleşiyor! Model tahmini yapıyor.
+    prediction = ml_model.predict(input_data)
+    
+    # Küsuratlı araba parçası satılamayacağı için (Örn: 14.3) sayıyı yuvarlıyoruz
+    predicted_value = int(round(prediction[0]))
+    if predicted_value < 0: predicted_value = 0 # Eksi satış olmaz
+
+    return {
+        "part_id": part_id,
+        "next_month": next_month,
+        "current_month_sales": current_month_sales,
+        "predicted_sales": predicted_value
+    }
