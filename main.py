@@ -43,6 +43,20 @@ def create_supplier(supplier: schemas.SupplierCreate, db: Session = Depends(get_
 def read_suppliers(skip: int = 0, limit: int = 100, db: Session = Depends(get_db)):
     return db.query(models.Supplier).offset(skip).limit(limit).all()
 
+@app.delete("/suppliers/{supplier_id}")
+def delete_supplier(supplier_id: int, db: Session = Depends(get_db)):
+    # 1. Önce silinecek tedarikçiyi bul
+    db_supplier = db.query(models.Supplier).filter(models.Supplier.id == supplier_id).first()
+    
+    # 2. Eğer öyle bir tedarikçi yoksa hata fırlat
+    if not db_supplier:
+        raise HTTPException(status_code=404, detail="Silinmek istenen tedarikçi bulunamadı.")
+        
+    # 3. Bulunduysa veritabanından sil ve onayla
+    db.delete(db_supplier)
+    db.commit()
+    return {"message": f"Tedarikçi (ID: {supplier_id}) başarıyla silindi."}
+
 # --- YEDEK PARÇA (SPARE PART) UÇ NOKTALARI ---
 @app.post("/parts/", response_model=schemas.SparePartResponse)
 def create_spare_part(part: schemas.SparePartCreate, db: Session = Depends(get_db)):
@@ -58,6 +72,20 @@ def create_spare_part(part: schemas.SparePartCreate, db: Session = Depends(get_d
 @app.get("/parts/", response_model=list[schemas.SparePartResponse])
 def read_parts(skip: int = 0, limit: int = 100, db: Session = Depends(get_db)):
     return db.query(models.SparePart).offset(skip).limit(limit).all()
+
+@app.delete("/parts/{part_id}")
+def delete_spare_part(part_id: int, db: Session = Depends(get_db)):
+    # 1. Silinecek parçayı veritabanında ara
+    db_part = db.query(models.SparePart).filter(models.SparePart.id == part_id).first()
+    
+    # 2. Parça yoksa 404 hatası döndür
+    if not db_part:
+        raise HTTPException(status_code=404, detail="Silinmek istenen yedek parça bulunamadı.")
+    
+    # 3. Bulunduysa sil ve veritabanına kaydet
+    db.delete(db_part)
+    db.commit()
+    return {"message": f"Yedek parça (ID: {part_id}) başarıyla silindi."}
 
 # --- STOK HAREKETLERİ (STOCK MOVEMENTS) UÇ NOKTALARI ---
 @app.post("/movements/", response_model=schemas.StockMovementResponse)
@@ -87,6 +115,32 @@ def create_stock_movement(movement: schemas.StockMovementCreate, db: Session = D
 def read_movements(skip: int = 0, limit: int = 100, db: Session = Depends(get_db)):
     movements = db.query(models.StockMovement).offset(skip).limit(limit).all()
     return movements
+
+@app.delete("/movements/{movement_id}")
+def delete_stock_movement(movement_id: int, db: Session = Depends(get_db)):
+    # 1. Silinecek stok hareketini bul
+    db_movement = db.query(models.StockMovement).filter(models.StockMovement.id == movement_id).first()
+    
+    if not db_movement:
+        raise HTTPException(status_code=404, detail="Silinmek istenen stok hareketi bulunamadı.")
+        
+    # 2. Harekete ait yedek parçayı bul (Stok miktarını düzeltmek için)
+    db_part = db.query(models.SparePart).filter(models.SparePart.id == db_movement.part_id).first()
+    
+    if db_part:
+        # 3. İşlemi tersine çevir (Geri alma mantığı)
+        if db_movement.movement_type == "OUT":
+            # Satış iptal edildi, mallar depoya geri döndü -> Stoğu artır
+            db_part.stock_quantity += db_movement.quantity
+        elif db_movement.movement_type == "IN":
+            # Mal alımı iptal edildi -> Stoğu azalt
+            db_part.stock_quantity -= db_movement.quantity
+
+    # 4. Hareketi kalıcı olarak sil ve değişiklikleri veritabanına kaydet
+    db.delete(db_movement)
+    db.commit()
+    
+    return {"message": f"Stok hareketi (ID: {movement_id}) silindi ve stok miktarı başarıyla geri alındı."}
 
 # Modeli uygulama başlarken bir kere hafızaya alıyoruz (Her istekte baştan yüklememek için)
 try:
@@ -142,3 +196,33 @@ def predict_next_month_sales(part_id: int, db: Session = Depends(get_db)):
         "current_month_sales": current_month_sales,
         "predicted_sales": predicted_value
     }
+
+@app.get("/api/sales-history/{part_id}")
+def get_sales_history(part_id: int, db: Session = Depends(get_db)):
+    # Veritabanına gidip bu parçanın geçmiş aylardaki toplam satışlarını çekiyoruz
+    history = db.query(
+        func.extract('year', models.StockMovement.movement_date).label('year'),
+        func.extract('month', models.StockMovement.movement_date).label('month'),
+        func.sum(models.StockMovement.quantity).label('total_sales')
+    ).filter(models.StockMovement.part_id == part_id)\
+     .filter(models.StockMovement.movement_type == "OUT")\
+     .group_by('year', 'month')\
+     .order_by('year', 'month').all()
+
+    # Frontend'in (Chart.js) kolayca okuyabileceği bir JSON listesine çeviriyoruz
+    # Örnek Çıktı: [{"year": 2025, "month": 1, "total_sales": 15}, ...]
+    result = []
+    for row in history:
+        result.append({
+            "year": int(row.year),
+            "month": int(row.month),
+            "total_sales": int(row.total_sales) if row.total_sales else 0
+        })
+        
+    return result
+
+@app.get("/api/parts")
+def get_parts_list(db: Session = Depends(get_db)):
+    # Sadece ID ve İsimleri çekiyoruz ki gereksiz veri yükü olmasın
+    parts = db.query(models.SparePart.id, models.SparePart.name).order_by(models.SparePart.id).all()
+    return [{"id": p.id, "name": p.name} for p in parts]
