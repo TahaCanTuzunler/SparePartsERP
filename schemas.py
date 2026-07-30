@@ -2,6 +2,8 @@ from pydantic import BaseModel, EmailStr
 from datetime import datetime
 from typing import List, Optional
 
+from typing import Optional # Update özelliği eklemek için Optional'ı import ediyoruz
+
 # --- TEDARİKÇİ ŞEMALARI ---
 class SupplierBase(BaseModel):
     name: str
@@ -30,6 +32,13 @@ class SparePartCreate(SparePartBase):
 
 class SparePartResponse(SparePartBase):
     id: int
+
+class SparePartUpdate(BaseModel):
+    name: Optional[str] = None
+    description: Optional[str] = None
+    price: Optional[float] = None
+    stock_quantity: Optional[int] = None
+    supplier_id: Optional[int] = None
 
     class Config:
         from_attributes = True

@@ -87,6 +87,23 @@ def delete_spare_part(part_id: int, db: Session = Depends(get_db)):
     db.commit()
     return {"message": f"Yedek parça (ID: {part_id}) başarıyla silindi."}
 
+@app.patch("/parts/{part_id}", response_model = schemas.SparePartUpdate)
+def update_spare_part(part_id: int, part: schemas.SparePartUpdate, db: Session = Depends(get_db)):
+    db_part = db.query(models.SparePart).filter(models.SparePart.id == part_id).first()
+
+    if not db_part:
+        raise HTTPException(status_code=404, detail="Güncellenmek istenen yedek parça bulunamadı.")
+
+    update_data = part.model_dump(exclude_unset=True)
+
+    for key, value in update_data.items():
+        setattr(db_part, key, value)
+
+    db.commit()
+    db.refresh(db_part)
+    
+    return db_part
+
 # --- STOK HAREKETLERİ (STOCK MOVEMENTS) UÇ NOKTALARI ---
 @app.post("/movements/", response_model=schemas.StockMovementResponse)
 def create_stock_movement(movement: schemas.StockMovementCreate, db: Session = Depends(get_db)):

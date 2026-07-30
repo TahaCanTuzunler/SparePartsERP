@@ -30,8 +30,8 @@
         .stat-value { font-size: 32px; font-weight: bold; color: #0f172a; margin-top: 10px; }
 
         /* --- GRAFİK ALANI --- */
-        .chart-wrapper { background: white; padding: 25px; border-radius: 12px; box-shadow: 0 4px 6px -1px rgba(0,0,0,0.05); }
-        .controls { display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; border-bottom: 1px solid #e2e8f0; padding-bottom: 15px; }
+        .chart-wrapper { background: white; padding: 25px; border-radius: 12px; box-shadow: 0 4px 6px -1px rgba(202, 15, 15, 0.05); }
+        .controls { display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; border-bottom: 1px solid #e6e8eb; padding-bottom: 15px; }
         .chart-container { height: 400px; width: 100%; }
         .ai-badge { background: #dcfce7; color: #166534; padding: 10px 15px; border-radius: 6px; font-weight: 600; display: none; margin-bottom: 15px; }
         select, input { padding: 10px; border-radius: 6px; border: 1px solid #cbd5e1; font-size: 14px; outline: none; }
@@ -85,7 +85,7 @@
                     <button id="btnAll" class="active" onclick="setChartFilter(99)">Tümü</button>
                 </div>
             </div>
-            <div id="aiBadge" class="ai-badge">🤖 Hesaplanıyor...</div>
+            <div id="aiBadge" class="ai-badge">Hesaplanıyor...</div> 
             <div class="chart-container"><canvas id="salesChart"></canvas></div>
         </div>
     </div>
@@ -94,26 +94,28 @@
     <div id="page-parts" class="page-section">
         <div class="crud-grid">
             <div class="crud-form">
-                <h3>Yeni Parça Ekle</h3>
-                <form onsubmit="event.preventDefault(); addPart();">
+                <h3 id="partFormTitle">Yeni Parça Ekle</h3>
+                <form onsubmit="event.preventDefault(); savePart();">
                     <div class="form-group"><label>Parça Adı</label><input type="text" id="partName" required></div>
                     <div class="form-group"><label>Açıklama</label><input type="text" id="partDesc"></div>
                     <div class="form-group"><label>Fiyat (₺)</label><input type="number" step="0.01" id="partPrice" required></div>
-                    <div class="form-group"><label>Başlangıç Stoğu</label><input type="number" id="partStock" required></div>
+                    <div class="form-group"><label>Stok Miktarı</label><input type="number" id="partStock" required></div>
                     <div class="form-group"><label>Tedarikçi</label><select id="partSupplierId" required><option value="">Seçiniz...</option></select></div>
-                    <button type="submit" class="btn-primary">Kaydet</button>
+                    
+                    <button type="submit" id="partSubmitBtn" class="btn-primary">Kaydet</button>
+                    <!-- Güncelleme modunda iptal edebilmek için gizli bir buton -->
+                    <button type="button" id="partCancelBtn" class="btn-danger" style="display: none; width: 100%; margin-top: 10px;" onclick="cancelPartEdit()">İptal Et</button>
                 </form>
             </div>
             <div class="crud-table-wrapper">
                 <input type="text" class="search-bar" id="searchPart" onkeyup="filterParts()" placeholder="🔍 Parça adı veya ID'sine göre ara...">
                 <table>
-                    <thead><tr><th>ID</th><th>Parça Adı</th><th>Fiyat</th><th>Stok</th><th>İşlem</th></tr></thead>
+                    <thead><tr><th>ID</th><th>Parça Adı</th><th>Fiyat</th><th>Stok</th><th>Tedarikçi ID</th><th>İşlemler</th></tr></thead>
                     <tbody id="partsTableBody"></tbody>
                 </table>
             </div>
         </div>
     </div>
-
     <!-- 4. TEDARİKÇİLER SEKMSİ (CRUD) -->
     <div id="page-suppliers" class="page-section">
         <div class="crud-grid">
@@ -225,7 +227,7 @@
                 const [hRes, pRes] = await Promise.all([fetch(`${API_URL}/api/sales-history/${id}`), fetch(`${API_URL}/api/predict/${id}`)]);
                 rawHistoryData = await hRes.json(); predictionData = await pRes.json();
                 const badge = document.getElementById('aiBadge'); badge.style.display = 'inline-block';
-                badge.innerHTML = `🤖 Gelecek Ay Tahmini (${predictionData.next_month}. Ay): <b>${predictionData.predicted_sales} Adet Satış</b>`;
+                badge.innerHTML = `Gelecek Ay Tahmini (${predictionData.next_month}. Ay): <b>${predictionData.predicted_sales} Adet Satış</b>`;
                 renderChart();
             } catch (e) { console.error(e); }
         }
@@ -279,36 +281,81 @@
         }
 
         // ==========================================
-        // 2. PARÇA (PART) CRUD VE ARAMA
+        // 2. PARÇA (PART) CRUD, ARAMA VE GÜNCELLEME
         // ==========================================
+        let editingPartId = null; // Hangi parçayı düzenlediğimizi aklında tutacak değişken
+
         async function loadParts() {
             const res = await fetch(`${API_URL}/parts/`);
-            allParts = await res.json(); // Arama için globale aldık
+            allParts = await res.json();
             renderPartsTable(allParts);
             
-            // Stok hareketleri formundaki Parça seçimi dropdown'unu güncelle
             const select = document.getElementById('movPartId');
-            select.innerHTML = '<option value="">Seçiniz...</option>';
-            allParts.forEach(p => select.options.add(new Option(`#${p.id} ${p.name}`, p.id)));
+            if (select) {
+                select.innerHTML = '<option value="">Seçiniz...</option>';
+                allParts.forEach(p => select.options.add(new Option(`#${p.id} ${p.name}`, p.id)));
+            }
         }
+
         function renderPartsTable(data) {
             const tbody = document.getElementById('partsTableBody');
             tbody.innerHTML = '';
             data.forEach(p => {
                 const stockColor = p.stock_quantity < 10 ? 'color: red; font-weight: bold;' : '';
-                tbody.innerHTML += `<tr><td>#${p.id}</td><td>${p.name}</td><td>${p.price} ₺</td>
+                tbody.innerHTML += `<tr>
+                    <td>#${p.id}</td>
+                    <td>${p.name}</td>
+                    <td>${p.price} ₺</td>
                     <td style="${stockColor}">${p.stock_quantity}</td>
-                    <td><button class="btn-danger" onclick="deletePart(${p.id})">Sil</button></td></tr>`;
+                    <td>#${p.supplier_id}</td>
+                    <td>
+                        <button class="btn-primary" style="padding: 4px 8px; font-size: 12px; margin-right: 5px;" onclick="editPart(${p.id})">Düzenle</button>
+                        <button class="btn-danger" style="padding: 4px 8px;" onclick="deletePart(${p.id})">Sil</button>
+                    </td>
+                </tr>`;
             });
         }
+
         function filterParts() {
-            const text = document.getElementById('searchPart').value.toLowerCase();
+            const text = document.getElementById('searchPart').value.toLowerCase().trim();
             const filtered = allParts.filter(p => 
-                p.name.toLowerCase().includes(text) || p.id.toString().includes(text)
+                p.name.toLowerCase().includes(text) || p.id.toString() === text
             );
             renderPartsTable(filtered);
         }
-        async function addPart() {
+
+        // --- YENİ EKLENEN: Formu Düzenleme Moduna Sokma ---
+        function editPart(id) {
+            // Düzenlenecek parçayı hafızadaki (allParts) listeden bul
+            const part = allParts.find(p => p.id === id);
+            if(!part) return;
+
+            // Formun içini parçanın mevcut bilgileriyle doldur
+            document.getElementById('partName').value = part.name;
+            document.getElementById('partDesc').value = part.description || "";
+            document.getElementById('partPrice').value = part.price;
+            document.getElementById('partStock').value = part.stock_quantity;
+            document.getElementById('partSupplierId').value = part.supplier_id;
+
+            // Sistemi "Güncelleme" moduna geçir
+            editingPartId = id;
+            document.getElementById('partFormTitle').innerText = `Parça Güncelle (#${id})`;
+            document.getElementById('partSubmitBtn').innerText = "Değişiklikleri Güncelle";
+            document.getElementById('partCancelBtn').style.display = "block"; // İptal butonunu göster
+        }
+
+        // --- YENİ EKLENEN: Düzenleme Modundan Çıkma ---
+        function cancelPartEdit() {
+            editingPartId = null;
+            document.querySelector('#page-parts form').reset();
+            document.getElementById('partFormTitle').innerText = "Yeni Parça Ekle";
+            document.getElementById('partSubmitBtn').innerText = "Kaydet";
+            document.getElementById('partCancelBtn').style.display = "none";
+        }
+
+        // --- GÜNCELLENEN: Ekleme ve Güncelleme İşlemini Yapan Tek Fonksiyon ---
+        async function savePart() {
+            // Formdaki verileri topla
             const payload = {
                 name: document.getElementById('partName').value,
                 description: document.getElementById('partDesc').value,
@@ -316,12 +363,32 @@
                 stock_quantity: parseInt(document.getElementById('partStock').value),
                 supplier_id: parseInt(document.getElementById('partSupplierId').value)
             };
-            const res = await fetch(`${API_URL}/parts/`, {
-                method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify(payload)
+
+            let url = `${API_URL}/parts/`;
+            let methodType = 'POST'; // Varsayılan: Yeni ekleme (POST)
+
+            // Eğer editingPartId doluysa, demek ki güncelleme (PATCH) yapıyoruz!
+            if (editingPartId !== null) {
+                url = `${API_URL}/parts/${editingPartId}`;
+                methodType = 'PATCH';
+            }
+
+            const res = await fetch(url, {
+                method: methodType, 
+                headers: {'Content-Type': 'application/json'}, 
+                body: JSON.stringify(payload)
             });
-            if(res.ok) { document.querySelector('#page-parts form').reset(); loadParts(); loadDashboardStats(); }
-            else { const err = await res.json(); alert(err.detail); }
+
+            if(res.ok) { 
+                cancelPartEdit(); // İşlem başarılıysa formu sıfırla ve ekleme moduna dön
+                loadParts(); 
+                loadDashboardStats(); 
+            } else { 
+                const err = await res.json(); 
+                alert("Hata: " + JSON.stringify(err.detail)); 
+            }
         }
+
         async function deletePart(id) {
             if(!confirm('Bu parçayı silmek istediğinize emin misiniz?')) return;
             const res = await fetch(`${API_URL}/parts/${id}`, { method: 'DELETE' });
