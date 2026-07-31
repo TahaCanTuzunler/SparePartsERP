@@ -29,13 +29,13 @@ The project is fully Dockerized. You only need to have Docker installed on your 
 
 1. Clone the project:
 ```bash
-git clone [https://github.com/TahaCanTuzunler/SparePartsERP.git](https://github.com/TahaCanTuzunler/SparePartsERP.git)
+git clone https://github.com/TahaCanTuzunler/SparePartsERP.git
 cd spare-parts-erp
 ```
 
 Build and run the containers:
 
-`bashdocker-compose up --build`
+`docker-compose up --build`
 
 Visit the following addresses in your browser:
 
