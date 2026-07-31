@@ -1,0 +1,10 @@
+fastapi==0.139.2
+uvicorn==0.51.0
+SQLAlchemy==2.0.51
+psycopg2-binary==2.9.12
+pydantic==2.13.4
+pandas==3.0.5
+joblib==1.5.3
+scikit-learn==1.9.0
+xgboost==3.2.0
+email-validator==2.3.0

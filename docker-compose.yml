@@ -1,0 +1,32 @@
+version: '3.8'
+
+services:
+  # 1. Veritabanı Kutusu
+  db:
+    image: postgres:15
+    restart: always
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: 540717
+      POSTGRES_DB: spareparts_db
+    ports:
+      - "5432:5432"
+    volumes:
+      # Veritabanı silinirse veriler kaybolmasın diye kalıcı hafıza ayırıyoruz
+      - postgres_data:/var/lib/postgresql/data
+
+  # 2. FastAPI Kutusu
+  web:
+    build: .
+    restart: always
+    ports:
+      - "8000:8000"
+    environment:
+      # İşte database.py'de çağırdığımız o URL! 
+      # Dikkat et, adres olarak 'localhost' değil, üstteki servisin adı olan 'db' yazıyor.
+      DATABASE_URL: postgresql://postgres:540717@db:5432/spareparts_db
+    depends_on:
+      - db # Önce veritabanı ayağa kalksın, sonra API başlasın emri
+
+volumes:
+  postgres_data:

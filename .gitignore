@@ -1,16 +1,21 @@
-# Sanal Ortam (Virtual Environment)
+# Test ve Kurulum Dosyaları
+test_db.py
+seed_data.py
+
+# Makine Öğrenmesi Eğitim Kodları
+train_model.py
+
+# Python Sanal Ortam (Kesinlikle kopyalanmamalı)
+.venv/
 venv/
 env/
 
-# Python Önbellek Dosyaları (Cache)
+# Python Geçici Dosyaları
 __pycache__/
 *.pyc
 *.pyo
 *.pyd
 
-# İşletim Sistemi Dosyaları
-.DS_Store
-Thumbs.db
-
-# İleride ekleyeceğimiz gizli şifre dosyaları
-.env
+# Git ve Gizlilik
+.git/
+.gitignore
